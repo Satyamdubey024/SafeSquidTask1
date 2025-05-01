@@ -1,0 +1,260 @@
+#!/bin/bash
+
+
+top_apps(){
+
+echo "+--------------------------------+"
+    echo "| Top Processes (CPU & Mem) |"
+echo "+--------------------------------+"    
+echo "|--------|----------------------|----------|-------------|"
+printf "| %-6s | %-20s | %-8s | %-10s |\n" "PID" "Process Name" "CPU (%)" "Memory (%)"
+echo "|--------|----------------------|----------|-------------|"
+
+ps -eo pid,comm,%cpu,%mem --sort=-%cpu,-%mem | head -n 11 | tail -n +2 | while read pid comm cpu mem
+do
+    printf "| %-6s | %-20s | %-8s | %-10s |\n" "$pid" "$comm" "$cpu" "$mem"
+done
+
+
+
+ echo "+--------------------------------+"
+
+}
+##top_apps
+
+##network monitoring
+
+
+network_monitoring() {
+    echo "+-----------------------------------------------+"
+    echo "|               Network Monitoring              |"
+    echo "+-----------------------------------------------+"
+
+    # 1. Concurrent connections
+    connections=$(ss -tun | tail -n +2 | wc -l)
+
+    # 2. Total packet drops (RX)
+    rx_drops=$(cat /proc/net/dev | awk '/:/ {print $1, $2, $4}' | grep -v "lo" | awk '{sum+=$3} END {print sum}')
+
+    # 3. Data in/out in MB
+    rx_bytes=$(cat /proc/net/dev | grep -v lo | awk '{sum+=$2} END {print sum}')
+    tx_bytes=$(cat /proc/net/dev | grep -v lo | awk '{sum+=$10} END {print sum}')
+
+    rx_mb=$(awk "BEGIN {printf \"%.2f\", $rx_bytes / 1024 / 1024}")
+    tx_mb=$(awk "BEGIN {printf \"%.2f\", $tx_bytes / 1024 / 1024}")
+
+    echo "| Active Connections: $connections     | Packet Drops: $rx_drops        |"
+    echo "| Data In: ${rx_mb}MB        | Data Out: ${tx_mb}MB       |"
+    echo "+-----------------------------------------------+"
+}
+
+# Run it
+##network_monitoring
+
+
+disk_usage() {
+    echo "+--------------------------------------+"
+    echo "|            Disk Usage                |"
+    echo "+--------------------------------------+"
+    printf "| %-20s | %-6s | %-6s |\n" "Mount Point" "Used" "Use%"
+
+    df -h --output=target,used,pcent | tail -n +2 | while read -r target used percent; do
+        usage_num=$(echo "$percent" | tr -d '%')
+        if [ "$usage_num" -ge 80 ]; then
+            printf "| %-20s | %-6s | \e[31m%-6s\e[0m |\n" "$target" "$used" "$percent"
+        else
+            printf "| %-20s | %-6s | %-6s |\n" "$target" "$used" "$percent"
+        fi
+    done
+
+    echo "+--------------------------------------+"
+}
+
+# Run it
+##disk_usage
+
+
+
+
+
+
+
+system_load() {
+    echo "+------------------------------------------+"
+    echo "|              System Load                 |"
+    echo "+------------------------------------------+"
+
+    # 1. Load Average
+    loadavg=$(uptime | awk -F'load average: ' '{print $2}')
+    echo "| Load Average (1/5/15 min): $loadavg |"
+
+    # 2. CPU Usage Breakdown
+    # From /proc/stat: user, nice, system, idle, iowait, irq, softirq
+    read cpu user nice system idle iowait irq softirq steal guest < /proc/stat
+
+    total=$((user + nice + system + idle + iowait + irq + softirq))
+    total_idle=$((idle + iowait))
+
+    user_p=$(awk "BEGIN {printf \"%.1f\", ($user / $total) * 100}")
+    system_p=$(awk "BEGIN {printf \"%.1f\", ($system / $total) * 100}")
+    idle_p=$(awk "BEGIN {printf \"%.1f\", ($total_idle / $total) * 100}")
+    iowait_p=$(awk "BEGIN {printf \"%.1f\", ($iowait / $total) * 100}")
+
+    echo "| CPU Usage:                               |"
+    echo "|   User:   $user_p%   System: $system_p%   Idle: $idle_p%   |"
+    echo "|   IOWait: $iowait_p%                            |"
+    echo "+------------------------------------------+"
+}
+
+# Run it
+##system_load
+
+#!/bin/bash
+
+memory_usage() {
+    echo "+-------------------------------------------+"
+    echo "|               Memory Usage                |"
+    echo "+-------------------------------------------+"
+
+    # Extract memory stats
+    mem_total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    mem_free=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+    mem_used=$((mem_total - mem_free))
+
+    swap_total=$(grep SwapTotal /proc/meminfo | awk '{print $2}')
+    swap_free=$(grep SwapFree /proc/meminfo | awk '{print $2}')
+    swap_used=$((swap_total - swap_free))
+
+    # Convert KB to MB
+    mem_total_mb=$(awk "BEGIN {printf \"%.1f\", $mem_total/1024}")
+    mem_used_mb=$(awk "BEGIN {printf \"%.1f\", $mem_used/1024}")
+    mem_free_mb=$(awk "BEGIN {printf \"%.1f\", $mem_free/1024}")
+
+    swap_total_mb=$(awk "BEGIN {printf \"%.1f\", $swap_total/1024}")
+    swap_used_mb=$(awk "BEGIN {printf \"%.1f\", $swap_used/1024}")
+    swap_free_mb=$(awk "BEGIN {printf \"%.1f\", $swap_free/1024}")
+
+    echo "| RAM: Total: ${mem_total_mb}MB | Used: ${mem_used_mb}MB | Free: ${mem_free_mb}MB |"
+    echo "| Swap: Total: ${swap_total_mb}MB | Used: ${swap_used_mb}MB | Free: ${swap_free_mb}MB |"
+    echo "+-------------------------------------------+"
+}
+
+# Run it
+#memory_usage
+
+#!/bin/bash
+
+process_monitoring() {
+    echo "+-----------------------------------------------+"
+    echo "|               Process Monitoring              |"
+    echo "+-----------------------------------------------+"
+
+    # Total number of running processes
+    total_procs=$(ps -e --no-headers | wc -l)
+    echo "| Total Active Processes: $total_procs"
+
+    echo "| Top 5 by CPU Usage:                         |"
+    echo "| PID   USER     %CPU  %MEM  COMMAND          |"
+    ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 6 | tail -n 5 | awk '{printf "| %-5s %-8s %-5s %-5s %-15s |\n", $1, $2, $3, $4, $5}'
+
+    echo "| Top 5 by Memory Usage:                      |"
+    echo "| PID   USER     %MEM  %CPU  COMMAND          |"
+    ps -eo pid,user,%mem,%cpu,comm --sort=-%mem | head -n 6 | tail -n 5 | awk '{printf "| %-5s %-8s %-5s %-5s %-15s |\n", $1, $2, $3, $4, $5}'
+
+    echo "+-----------------------------------------------+"
+}
+
+# Run it
+#process_monitoring
+
+#!/bin/bash
+
+service_monitoring() {
+    echo "+------------------------------------------+"
+    echo "|            Service Monitoring            |"
+    echo "+------------------------------------------+"
+    printf "| %-10s | %-20s |\n" "Service" "Status"
+    echo "+------------+--------------------------+"
+
+    # List of services to check
+    services=("sshd" "nginx" "apache2" "iptables")
+
+    for svc in "${services[@]}"; do
+        if systemctl list-units --type=service | grep -q "$svc"; then
+            status=$(systemctl is-active "$svc" 2>/dev/null)
+            if [ "$status" == "active" ]; then
+                printf "| %-10s | \e[32m%-20s\e[0m |\n" "$svc" "$status"
+            else
+                printf "| %-10s | \e[31m%-20s\e[0m |\n" "$svc" "$status"
+            fi
+        else
+            printf "| %-10s | \e[33m%-20s\e[0m |\n" "$svc" "not found"
+        fi
+    done
+
+    echo "+------------------------------------------+"
+}
+
+# Run it
+#service_monitoring
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# If no arguments are given, show the full dashboard repeatedly
+if [ $# -eq 0 ]; then
+    while true; do
+        clear
+        echo "========= Proxy Server Resource Dashboard ========="
+        top_apps
+	network_monitoring
+	disk_usage
+	system_load
+        memory_usage
+        process_monitoring
+        service_monitoring
+        echo "==================================================="
+           sleep 5       
+    done
+
+# If arguments are provided, show selected sections only once
+else
+    while [ $# -gt 0 ]; do
+        case "$1" in
+         
+            -memory) memory_usage ;;
+            -disk) disk_usage ;;
+            -network) network_monitoring ;;
+            -process) process_monitoring ;;
+            -services) service_monitoring ;;
+            -topapps) top_apps ;;
+	    -sysload) system_load ;;
+            -all)
+                top_apps
+                memory_usage
+                cpu_load
+                disk_usage
+                network_monitoring
+                process_monitoring
+                service_monitoring ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Available options: -topapps -network -disk -sysload -memory -process -services -all"
+                ;;
+        esac
+        shift
+    done
+fi
+
+
+
